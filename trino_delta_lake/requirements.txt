@@ -1,0 +1,5 @@
+faker==19.13.0
+pandas==2.1.4
+deltalake==0.15.1
+pyarrow==14.0.2
+boto3==1.34.14 

@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server --console-address ":9001" /data
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  mariadb:
+    image: mariadb:10.6
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_USER: hive
+      MYSQL_PASSWORD: hive
+      MYSQL_DATABASE: metastore_db
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mariadb
+      PMA_USER: root
+      PMA_PASSWORD: admin
+    depends_on:
+      - mariadb
+
+  hive-metastore:
+    image: bitsondatadev/hive-metastore:latest
+    ports:
+      - "9083:9083"
+    environment:
+      METASTORE_DB_HOSTNAME: mariadb
+    volumes:
+      - ./conf/metastore-site.xml:/opt/apache-hive-metastore-3.0.0-bin/conf/metastore-site.xml
+      - ./conf/core-site.xml:/opt/hadoop-3.2.0/etc/hadoop/core-site.xml
+      - ./lib/mariadb-java-client.jar:/opt/apache-hive-metastore-3.0.0-bin/lib/mariadb-java-client.jar
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  trino:
+    image: trinodb/trino:419
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./conf/trino:/etc/trino
+      - ./conf/trino/auth:/etc/trino/auth
+      - trino_data:/data/trino
+      - trino_logs:/var/log/trino
+    depends_on:
+      - hive-metastore
+      - minio
+
+  data-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile.datagen
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+      MINIO_ENDPOINT: minio:9000
+
+volumes:
+  minio_data:
+  mariadb_data:
+  trino_data:
+  trino_logs: 
