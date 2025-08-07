@@ -50,9 +50,12 @@ docker exec -it trino_delta_lake-trino-1 trino --server localhost:8080 --user ad
 
 2. [Register](conf/trino/register.sql) delta tables
 
+
 3. Example queries:
 
 ```sql
+SHOW CATALOGS;
+SHOW SCHEMAS FROM delta;
 -- List all tables
 SHOW TABLES FROM delta.default;
 
