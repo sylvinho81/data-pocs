@@ -1,7 +1,4 @@
 CALL delta.system.flush_metadata_cache();
-CALL delta.system.sync_partition_metadata('default', 'users', 'FULL');
-CALL delta.system.sync_partition_metadata('default', 'clients', 'FULL');
-
 
 CREATE SCHEMA IF NOT EXISTS delta.default WITH (location = 's3a://delta-lake/');
 

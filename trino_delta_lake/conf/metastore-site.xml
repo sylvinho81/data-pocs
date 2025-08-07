@@ -24,7 +24,7 @@
     </property>
     <property>
         <name>javax.jdo.option.ConnectionURL</name>
-        <value>jdbc:mariadb://mariadb:3306/metastore_db?createDatabaseIfNotExist=true</value>
+        <value>jdbc:mariadb://mariadb:3306/metastore_db?createDatabaseIfNotExist=true&amp;sessionVariables=sql_mode='ANSI_QUOTES'</value>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionUserName</name>
