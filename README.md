@@ -24,6 +24,15 @@ Benchmark comparing Parquet and Vortex data formats using Polars and DuckDB quer
 - Includes both sequential scan and random access tests
 - Generates detailed performance reports and visualizations
 
+### [smart_city](./smart_city/)
+
+FIWARE-based smart city demo: air quality monitoring with Orion Context Broker, QuantumLeap, CrateDB, and Grafana.
+
+- Uses **AirQualityObserved** data model and Orion for context
+- QuantumLeap stores time-series in CrateDB on entity updates
+- Grafana dashboards for CO, temperature, and other metrics
+- Docker Compose stack and Python scripts for setup and sensor simulation
+
 ### [trino_delta_lake](./trino_delta_lake/)
 
 Proof of Concept for using Trino with Delta Lake for data querying and analytics.
