@@ -1,0 +1,101 @@
+# FIWARE Air Quality Monitoring Stack
+# Based on: https://fiware-training.readthedocs.io/es-mx/latest/casodeestudio/descripcion/
+# QuantumLeap image: https://hub.docker.com/r/orchestracities/quantumleap
+
+services:
+  orion:
+    image: fiware/orion:1.14.0
+    ports:
+      - "1026:1026"
+    command: -logLevel DEBUG -noCache -dbhost mongo
+    depends_on:
+      - mongo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://0.0.0.0:1026/version"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+
+  mongo:
+    image: mongo:4.4
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+
+  mongo-express:
+    image: mongo-express:1.0.2-20-alpine3.19
+    ports:
+      - "8082:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+    depends_on:
+      - mongo
+
+  redis:
+    image: redis:6.2
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  crate:
+    image: crate:4.6.7
+    # single-node skips bootstrap checks (e.g. vm.max_map_count), so CrateDB works in Docker/VMs without host sysctl
+    command: crate -Cauth.host_based.enabled=false -Ccluster.name=democluster -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*" -Cdiscovery.type=single-node
+    environment:
+      - LOG4J_FORMAT_MSG_NO_LOOKUPS=true
+    ports:
+      - "4200:4200"
+      - "4300:4300"
+    volumes:
+      - cratedata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:4200/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+  quantumleap:
+    image: orchestracities/quantumleap:latest
+    ports:
+      - "8668:8668"
+    depends_on:
+      mongo:
+        condition: service_started
+      orion:
+        condition: service_started
+      crate:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - CRATE_HOST=crate
+      - ORION_URL=http://orion:1026
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOGLEVEL=DEBUG
+
+  grafana:
+    image: grafana/grafana:8.5.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-worldmap-panel
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - crate
+
+volumes:
+  mongodata:
+  cratedata:
+  redisdata:
+
+networks:
+  default:
+    driver: bridge
