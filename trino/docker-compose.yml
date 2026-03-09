@@ -1,0 +1,126 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: trino_poc_postgres
+    environment:
+      POSTGRES_USER: trino
+      POSTGRES_PASSWORD: trino
+      POSTGRES_DB: taxi
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:RELEASE.2024-01-05T22-17-24Z
+    container_name: trino_poc_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-create-buckets:
+    image: minio/mc:latest
+    container_name: trino_poc_minio_buckets
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for MinIO..."
+        for i in $$(seq 1 30); do
+          if mc alias set myminio http://minio:9000 minio minio123 2>/dev/null; then
+            echo "MinIO is up."
+            break
+          fi
+          [ $$i -eq 30 ] && (echo "Timeout waiting for MinIO."; exit 1)
+          sleep 2
+        done
+        mc mb myminio/trino-poc-iceberg --ignore-existing
+        mc mb myminio/taxi-raw --ignore-existing
+        echo "Buckets trino-poc-iceberg and taxi-raw ready."
+    depends_on:
+      - minio
+
+  mariadb:
+    image: mariadb:10.6
+    container_name: trino_poc_mariadb
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_USER: hive
+      MYSQL_PASSWORD: hive
+      MYSQL_DATABASE: metastore_db
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  hive-metastore:
+    image: bitsondatadev/hive-metastore:latest
+    container_name: trino_poc_hive_metastore
+    environment:
+      METASTORE_DB_HOSTNAME: mariadb
+    volumes:
+      - ./conf/metastore-site.xml:/opt/apache-hive-metastore-3.0.0-bin/conf/metastore-site.xml
+      - ./conf/core-site.xml:/opt/hadoop-3.2.0/etc/hadoop/core-site.xml
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      minio-create-buckets:
+        condition: service_completed_successfully
+    ports:
+      - "9083:9083"
+
+  wait-for-metastore:
+    image: busybox:1.36
+    container_name: trino_poc_wait_metastore
+    command: ["sh", "-c", "echo 'Waiting for Hive metastore on 9083...'; for i in $$(seq 1 90); do nc -z hive-metastore 9083 && echo 'Metastore is up.' && exit 0; sleep 2; done; echo 'Timeout.'; exit 1"]
+    depends_on:
+      - hive-metastore
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: trino_poc_clickhouse
+    environment:
+      CLICKHOUSE_DB: taxi
+      CLICKHOUSE_USER: trino
+      CLICKHOUSE_PASSWORD: trino
+    ports:
+      - "8123:8123"
+      - "9009:9009"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+
+  trino:
+    image: trinodb/trino:443
+    container_name: trino_poc_trino
+    user: root
+    depends_on:
+      postgres:
+        condition: service_started
+      minio:
+        condition: service_started
+      clickhouse:
+        condition: service_started
+      hive-metastore:
+        condition: service_started
+      wait-for-metastore:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./conf/trino:/etc/trino
+
+volumes:
+  postgres_data:
+  minio_data:
+  mariadb_data:
+  clickhouse_data:
