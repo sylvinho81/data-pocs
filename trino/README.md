@@ -121,15 +121,15 @@ Then run the setup script so the **silver** layer is a real [Apache Iceberg](htt
 
 **Option B – Trino CLI via Docker (no install)**
 
-Run the Trino CLI inside a container (uses the same image as the server). **From the `trino/` directory:**
+Run the Trino CLI inside a container (uses the same image as the server). **From the `trino/` directory**, ensure the stack is up first (`docker compose up -d`). Use the server’s **trino-server** in the commands below; a hostname with underscores causes `UnknownHostException: null` for all queries.
 
 - **Interactive:** open a CLI session and type SQL, then exit with `quit` or Ctrl+D.
   ```bash
-  docker compose run --rm trino trino --server http://trino:8080
+  docker compose run --rm trino trino --server http://trino-server:8080
   ```
 - **Run a SQL file:**
   ```bash
-  docker compose run --rm -v "$(pwd)/sql:/sql" trino trino --server http://trino:8080 -f /sql/01_setup_iceberg_silver.sql
+  docker compose run --rm -v "$(pwd)/sql:/sql" trino trino --server http://trino-server:8080 -f /sql/01_setup_iceberg_silver.sql
   ```
 
 **Option C – Trino CLI installed on your machine**

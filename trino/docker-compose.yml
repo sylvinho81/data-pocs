@@ -100,8 +100,8 @@ services:
       - clickhouse_data:/var/lib/clickhouse
 
   trino:
-    image: trinodb/trino:443
-    container_name: trino_poc_trino
+    image: trinodb/trino:479
+    container_name: trino-server
     user: root
     depends_on:
       postgres:

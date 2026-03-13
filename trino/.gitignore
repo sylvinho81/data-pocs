@@ -15,6 +15,6 @@ __pycache__
 *.pyzwzwzw
 
 
-parquet_files/
-raw_files/trino/parquet_files/ny_taxi_raw/yellow_tripdata_2025-01.parquet
+parquet_files/ny_taxi_raw/yellow_tripdata_2025-01.parquet
 description.md
+data_dictionary_trip_records_yellow.pdf
