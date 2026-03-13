@@ -97,6 +97,18 @@ This creates:
 - `dim.vendor`, `dim.rate_code`, `dim.payment_type`.
 - `dim.taxi_zone` populated from `raw_files/taxi_zone_lookup.csv`.
 
+### 3.5. Prepare local parquet files
+
+Before staging raw data in MinIO, make sure the local parquet folder exists and contains the NYC **yellow taxi trip record** parquet files:
+
+- **Data source**: NYC TLC Trip Record Data – see the **Trip Record Data Download Links** section on the official page  
+  (`https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page`).
+- For each year/month you want to include, download the **"Yellow Taxi Trip Records"** files (they are already in PARQUET format).
+- Save the downloaded parquet files under:
+  - **Project-relative path**: `parquet_files/ny_taxi_raw`
+
+The script `src/etl_minio_iceberg.py` reads those yellow taxi parquet files from this folder and uploads them into the MinIO raw bucket `taxi-raw/ny_taxi_raw/`.
+
 ### 4. Stage raw data in MinIO and create the Apache Iceberg silver table
 
 From `trino/src`:
@@ -105,7 +117,7 @@ From `trino/src`:
 python etl_minio_iceberg.py
 ```
 
-This uploads all `benchmark_vortex_parquet/ny_taxi_files/*.parquet` files into the **raw** MinIO bucket (`taxi-raw/ny_taxi_raw/`).
+This uploads all `parquet_files/ny_taxi_files/*.parquet` files into the **raw** MinIO bucket (`taxi-raw/ny_taxi_raw/`).
 
 Then run the setup script so the **silver** layer is a real [Apache Iceberg](https://iceberg.apache.org/) table (metadata + Parquet data written by Trino). Use one of these methods:
 
@@ -137,7 +149,7 @@ Run the Trino CLI inside a container (uses the same image as the server). **From
 If you install the [Trino CLI](https://trino.io/docs/current/installation.html#trino-cli) on your host, you can run:
 
 ```bash
-cd /home/pablo/Projects/Personal/data-pocs/trino
+cd /data-pocs/trino
 trino --server http://localhost:8080
 # or run a file:
 trino --server http://localhost:8080 -f sql/01_setup_iceberg_silver.sql
