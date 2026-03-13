@@ -37,6 +37,13 @@ FIWARE-based smart city demo: air quality monitoring with Orion Context Broker, 
 
 Proof of Concept for using Trino with Delta Lake for data querying and analytics.
 
+### [trino](./trino/)
+
+Proof of Concept for using Trino as a federated query engine over Postgres, MinIO (Apache Iceberg + raw Parquet), and ClickHouse on the NYC yellow taxi dataset.
+
+- Shows how Trino catalogs map to different backends and how to join Iceberg tables with Postgres lookup tables
+- Includes a ClickHouse star-schema ETL and Trino analytics queries as well. 
+
 ---
 
 *Each project contains its own README with specific setup and usage instructions.*
