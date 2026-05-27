@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+nyc_taxi/target/
+nyc_taxi/dbt_packages/
+nyc_taxi/logs/
+description.md
+../.cursor/
+.user.yml
+files/

@@ -1,0 +1,5 @@
+polars>=1.0.0
+pyarrow>=14.0.0
+clickhouse-connect>=0.7.0
+dbt-core>=1.8.0,<1.10.0
+dbt-clickhouse>=1.8.0

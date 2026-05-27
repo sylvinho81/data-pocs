@@ -1,0 +1,24 @@
+name: nyc_taxi
+version: 1.0.0
+config-version: 2
+
+profile: nyc_taxi
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+clean-targets:
+  - target
+  - dbt_packages
+
+models:
+  nyc_taxi:
+    analytics:
+      +materialized: table
+
+seeds:
+  nyc_taxi:
+    random_sample_location_ids:
+      +column_types:
+        location_id: Int32
