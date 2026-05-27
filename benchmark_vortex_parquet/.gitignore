@@ -1,1 +1,2 @@
-ny_taxi_files/
+ny_taxi_files/vortex/*.vortex
+ny_taxi_files/*.parquet
