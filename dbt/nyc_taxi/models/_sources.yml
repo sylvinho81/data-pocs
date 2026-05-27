@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw yellow taxi trips loaded from parquet via Polars
+    schema: nyc_taxi
+    tables:
+      - name: yellow_trip
+        description: November 2025 yellow taxi trip records

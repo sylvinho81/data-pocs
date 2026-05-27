@@ -24,6 +24,14 @@ Benchmark comparing Parquet and Vortex data formats using Polars and DuckDB quer
 - Includes both sequential scan and random access tests
 - Generates detailed performance reports and visualizations
 
+### [dbt](./dbt/)
+
+Proof of Concept for learning **dbt** with NYC yellow taxi data, **Polars** ingest, and **ClickHouse** as the warehouse.
+
+- Loads parquet into ClickHouse with Polars, then builds analytics as version-controlled SQL models
+- Mirrors the benchmark analyses from `benchmark_vortex_parquet` (payment types, rides by location, airport fee, etc.)
+- Demonstrates dbt sources, seeds, refs, table materializations, and a ClickHouse view
+
 ### [smart_city](./smart_city/)
 
 FIWARE-based smart city demo: air quality monitoring with Orion Context Broker, QuantumLeap, CrateDB, and Grafana.
