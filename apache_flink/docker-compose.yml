@@ -63,7 +63,7 @@ services:
       - flink-poc
 
   iceberg-rest:
-    image: tabulario/iceberg-rest:1.6.0
+    image: apache/iceberg-rest-fixture:1.10.1
     container_name: flink-poc-iceberg-rest
     ports:
       - "18181:8181"
@@ -86,7 +86,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: apache-flink-poc:1.18.1
+    image: apache-flink-poc:2.1.3
     container_name: flink-poc-jobmanager
     command: jobmanager
     ports:
@@ -105,7 +105,7 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         parallelism.default: 1
         taskmanager.numberOfTaskSlots: 4
-        state.backend: hashmap
+        state.backend.type: hashmap
         execution.checkpointing.interval: 30000
         execution.checkpointing.mode: EXACTLY_ONCE
         classloader.parent-first-patterns.additional: org.apache.iceberg;com.codahale;io.dropwizard
@@ -127,7 +127,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: apache-flink-poc:1.18.1
+    image: apache-flink-poc:2.1.3
     container_name: flink-poc-taskmanager
     command: taskmanager
     environment:
@@ -144,7 +144,7 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
         parallelism.default: 1
-        state.backend: hashmap
+        state.backend.type: hashmap
         execution.checkpointing.interval: 30000
         classloader.parent-first-patterns.additional: org.apache.iceberg;com.codahale;io.dropwizard
     volumes:
@@ -159,7 +159,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: apache-flink-poc:1.18.1
+    image: apache-flink-poc:2.1.3
     container_name: flink-poc-job-submitter
     entrypoint: ["/bin/bash", "/opt/flink/usrlib/submit_job.sh"]
     environment:

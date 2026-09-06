@@ -57,7 +57,7 @@ Spark is excellent for **batch** and large-scale analytics. Spark Structured Str
 
 ### What you should notice while running this stack
 
-1. **One long-running job** in the [Flink UI](http://localhost:8081) — not a series of batch runs.
+1. **One long-running job** in the [Flink UI](http://localhost:18081) — not a series of batch runs.
 2. **Checkpoints every ~30s** — each successful checkpoint can commit a new Iceberg snapshot (atomic publish of files).
 3. **Watermarks** delay closing minute windows until event-time progress is safe — late USGS updates are tolerated instead of being counted in the wrong window.
 4. **Append-only Iceberg commits** — each Flink checkpoint publishes a new snapshot. (Iceberg upserts/equality deletes are possible in production; this POC keeps appends so Python readers like PyIceberg can scan easily.)
@@ -73,7 +73,7 @@ apache_flink/
 ├── README.md
 ├── requirements.txt          # Host / producer deps (Kafka client, Iceberg query)
 ├── requirements-flink.txt    # PyFlink deps for the Flink job image
-├── Dockerfile                # Flink 1.18 + PyFlink + Kafka/Iceberg JARs
+├── Dockerfile                # Flink 2.1 + PyFlink + Kafka/Iceberg JARs
 ├── Dockerfile.producer       # USGS → Kafka producer image
 ├── docker-compose.yml        # Full local stack
 ├── scripts/
@@ -86,6 +86,16 @@ apache_flink/
         └── earthquake_job.py
 ```
 
+### Versions (pinned)
+
+| Component | Version |
+|-----------|---------|
+| Apache Flink / PyFlink | **2.1.3** |
+| Apache Iceberg (Flink runtime) | **1.11.0** (`iceberg-flink-runtime-2.1`) |
+| Kafka SQL connector | **5.0.0-2.1** |
+| Iceberg REST fixture | **1.10.1** (`apache/iceberg-rest-fixture`) |
+
+Flink **2.3** is newer, but Iceberg’s released connectors currently top out at Flink **2.1** (2.2/2.3 land with Iceberg 1.12). This combo is the current “Flink 2.x + Iceberg” sweet spot for the POC.
 ---
 
 ## Prerequisites

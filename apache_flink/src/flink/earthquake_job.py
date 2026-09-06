@@ -55,7 +55,7 @@ def create_table_env() -> StreamTableEnvironment:
     checkpoint_ms = int(env_or_default("CHECKPOINT_INTERVAL_MS", "30000"))
     env.enable_checkpointing(checkpoint_ms)
 
-    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+    settings = EnvironmentSettings.in_streaming_mode()
     return StreamTableEnvironment.create(env, environment_settings=settings)
 
 
@@ -301,13 +301,15 @@ def start_pipeline(t_env: StreamTableEnvironment) -> None:
         """
         INSERT INTO iceberg_catalog.earthquakes.earthquakes_by_minute
         SELECT
-            TUMBLE_START(row_time, INTERVAL '1' MINUTE) AS window_start,
-            TUMBLE_END(row_time, INTERVAL '1' MINUTE) AS window_end,
+            window_start,
+            window_end,
             mag_bucket,
             COUNT(*) AS quake_count,
             MAX(magnitude) AS max_magnitude
-        FROM quakes_for_window
-        GROUP BY TUMBLE(row_time, INTERVAL '1' MINUTE), mag_bucket
+        FROM TABLE(
+            TUMBLE(TABLE quakes_for_window, DESCRIPTOR(row_time), INTERVAL '1' MINUTE)
+        )
+        GROUP BY window_start, window_end, mag_bucket
         """
     )
 
