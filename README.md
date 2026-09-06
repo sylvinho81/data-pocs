@@ -50,7 +50,15 @@ Proof of Concept for using Trino with Delta Lake for data querying and analytics
 Proof of Concept for using Trino as a federated query engine over Postgres, MinIO (Apache Iceberg + raw Parquet), and ClickHouse on the NYC yellow taxi dataset.
 
 - Shows how Trino catalogs map to different backends and how to join Iceberg tables with Postgres lookup tables
-- Includes a ClickHouse star-schema ETL and Trino analytics queries as well. 
+- Includes a ClickHouse star-schema ETL and Trino analytics queries as well.
+
+### [apache_flink](./apache_flink/)
+
+Streaming lakehouse POC: **USGS earthquake API → Kafka → PyFlink → Apache Iceberg (MinIO)**.
+
+- Continuous Flink job with event-time watermarks, checkpointed exactly-once Iceberg commits, and minute magnitude aggregates
+- Docker Compose stack (Kafka, Flink, MinIO, Iceberg REST catalog, USGS producer)
+- README compares Flink vs Spark for this streaming ingest pattern (no Spark implementation)
 
 ---
 

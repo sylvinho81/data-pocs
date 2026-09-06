@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/producer/ ./producer/
+
+ENV PYTHONUNBUFFERED=1 \
+    KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
+    KAFKA_TOPIC=earthquakes \
+    USGS_POLL_SECONDS=60 \
+    USGS_MIN_MAGNITUDE=2.5 \
+    USGS_LOOKBACK_HOURS=24
+
+CMD ["python", "-m", "producer.usgs_producer"]
