@@ -1,0 +1,27 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.python-version
+.pytest_cache/
+.mypy_cache/
+
+# Local secrets / env
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+
+# Logs and runtime data
+*.log
+warehouse/
+checkpoints/
+flink-checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
