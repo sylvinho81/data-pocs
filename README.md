@@ -60,6 +60,14 @@ Streaming lakehouse POC: **USGS earthquake API → Kafka → PyFlink → Apache 
 - Docker Compose stack (Kafka, Flink, MinIO, Iceberg REST catalog, USGS producer)
 - README compares Flink vs Spark for this streaming ingest pattern (no Spark implementation)
 
+### [iceberg_metrics](./iceberg_metrics/)
+
+PyIceberg POC: **one JSON seed per event → Apache Iceberg on MinIO**, with a **Hive metastore** catalog, plus a pull script that stores commit and scan metrics in a second Iceberg table.
+
+- Commit counters (files, records, bytes) are read from snapshot summaries in the table metadata
+- Scan counters (manifests and files kept or skipped) are collected by planning a query
+- Report rows follow an OpenTelemetry-style `iceberg.commit.*` / `iceberg.scan.*` metric map
+
 ---
 
 *Each project contains its own README with specific setup and usage instructions.*

@@ -29,7 +29,7 @@ services:
       - flink-poc
 
   minio:
-    image: minio/minio:RELEASE.2024-10-02T17-50-41Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     container_name: flink-poc-minio
     command: server /data --console-address ":9001"
     ports:
@@ -47,7 +47,7 @@ services:
           - warehouse.minio
 
   minio-init:
-    image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     container_name: flink-poc-minio-init
     depends_on:
       minio:
@@ -59,6 +59,16 @@ services:
       mc anonymous set download local/warehouse || true;
       echo 'MinIO warehouse bucket ready';
       "
+    networks:
+      - flink-poc
+
+  metrics-init:
+    image: busybox:1.36
+    container_name: flink-poc-metrics-init
+    user: "0:0"
+    volumes:
+      - ./metrics:/var/iceberg-metrics
+    command: ["sh", "-c", "mkdir -p /var/iceberg-metrics && chmod 777 /var/iceberg-metrics"]
     networks:
       - flink-poc
 
@@ -108,10 +118,12 @@ services:
         state.backend.type: hashmap
         execution.checkpointing.interval: 30000
         execution.checkpointing.mode: EXACTLY_ONCE
-        classloader.parent-first-patterns.additional: org.apache.iceberg;com.codahale;io.dropwizard
+        classloader.parent-first-patterns.additional: org.apache.iceberg;com.codahale;io.dropwizard;com.datapoc
+      ICEBERG_COMMIT_METRICS_PATH: /var/iceberg-metrics/commits.jsonl
     volumes:
       - ./src/flink:/opt/flink/usrlib
       - ./scripts/submit_job.sh:/opt/flink/usrlib/submit_job.sh:ro
+      - ./metrics:/var/iceberg-metrics
       - flink_checkpoints:/tmp/flink-checkpoints
     depends_on:
       kafka:
@@ -119,6 +131,8 @@ services:
       iceberg-rest:
         condition: service_started
       minio-init:
+        condition: service_completed_successfully
+      metrics-init:
         condition: service_completed_successfully
     networks:
       - flink-poc
@@ -146,9 +160,11 @@ services:
         parallelism.default: 1
         state.backend.type: hashmap
         execution.checkpointing.interval: 30000
-        classloader.parent-first-patterns.additional: org.apache.iceberg;com.codahale;io.dropwizard
+        classloader.parent-first-patterns.additional: org.apache.iceberg;com.codahale;io.dropwizard;com.datapoc
+      ICEBERG_COMMIT_METRICS_PATH: /var/iceberg-metrics/commits.jsonl
     volumes:
       - ./src/flink:/opt/flink/usrlib
+      - ./metrics:/var/iceberg-metrics
       - flink_checkpoints:/tmp/flink-checkpoints
     depends_on:
       - flink-jobmanager
@@ -173,9 +189,11 @@ services:
       AWS_SECRET_ACCESS_KEY: password
       AWS_REGION: us-east-1
       CHECKPOINT_INTERVAL_MS: "30000"
+      ICEBERG_COMMIT_METRICS_PATH: /var/iceberg-metrics/commits.jsonl
     volumes:
       - ./src/flink:/opt/flink/usrlib
       - ./scripts/submit_job.sh:/opt/flink/usrlib/submit_job.sh:ro
+      - ./metrics:/var/iceberg-metrics
     depends_on:
       flink-jobmanager:
         condition: service_started
@@ -210,6 +228,32 @@ services:
     networks:
       - flink-poc
     restart: unless-stopped
+
+  commit-metrics:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    image: apache-flink-poc-producer:latest
+    profiles: ["metrics"]
+    entrypoint: ["python", "/opt/scripts/commit_metrics.py"]
+    environment:
+      ICEBERG_REST_URI: http://iceberg-rest:8181
+      ICEBERG_WAREHOUSE: s3://warehouse/
+      S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: us-east-1
+      COMMIT_METRICS_PATH: /var/iceberg-metrics/commits.jsonl
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./scripts/commit_metrics.py:/opt/scripts/commit_metrics.py:ro
+      - ./metrics:/var/iceberg-metrics:ro
+    depends_on:
+      iceberg-rest:
+        condition: service_started
+    networks:
+      - flink-poc
+    restart: "no"
 
 networks:
   flink-poc:

@@ -58,7 +58,7 @@ Spark is excellent for **batch** and large-scale analytics. Spark Structured Str
 ### What you should notice while running this stack
 
 1. **One long-running job** in the [Flink UI](http://localhost:18081) — not a series of batch runs.
-2. **Checkpoints every ~30s** — each successful checkpoint can commit a new Iceberg snapshot (atomic publish of files).
+2. **Checkpoints every ~30s** — each successful checkpoint can commit a new Iceberg snapshot (atomic publish of files). Each commit emits an Iceberg [CommitReport](https://iceberg.apache.org/docs/latest/metrics-reporting/#commitreport) (duration, attempts, files, records, bytes).
 3. **Watermarks** delay closing minute windows until event-time progress is safe — late USGS updates are tolerated instead of being counted in the wrong window.
 4. **Append-only Iceberg commits** — each Flink checkpoint publishes a new snapshot. (Iceberg upserts/equality deletes are possible in production; this POC keeps appends so Python readers like PyIceberg can scan easily.)
 
@@ -78,8 +78,12 @@ apache_flink/
 ├── docker-compose.yml        # Full local stack
 ├── scripts/
 │   ├── submit_job.sh         # Waits for Flink, submits the PyFlink job
-│   └── query_iceberg.py      # Read Iceberg tables via REST catalog
+│   ├── query_iceberg.py      # Read Iceberg tables via REST catalog
+│   ├── commit_metrics.py     # CommitReport viewer, grouped by ingestion time
+│   └── commit_metrics.sh     # Runs the viewer via docker compose
 └── src/
+    ├── metrics/
+    │   └── JsonFileMetricsReporter.java  # Writes one JSON line per CommitReport
     ├── producer/
     │   └── usgs_producer.py
     └── flink/
@@ -94,6 +98,7 @@ apache_flink/
 | Apache Iceberg (Flink runtime) | **1.11.0** (`iceberg-flink-runtime-2.1`) |
 | Kafka SQL connector | **5.0.0-2.1** |
 | Iceberg REST fixture | **1.10.1** (`apache/iceberg-rest-fixture`) |
+| Object storage | **pgsty/minio** `RELEASE.2026-08-04T00-00-00Z` (MinIO community images were removed from Docker Hub) |
 
 Flink **2.3** is newer, but Iceberg’s released connectors currently top out at Flink **2.1** (2.2/2.3 land with Iceberg 1.12). This combo is the current “Flink 2.x + Iceberg” sweet spot for the POC.
 ---
@@ -113,7 +118,7 @@ cd apache_flink
 docker compose up --build -d
 ```
 
-First boot builds the Flink image (downloads connector JARs) and may take several minutes.
+First boot builds the Flink image (PyFlink plus connector JARs, several hundred MB) and may take several minutes. Give Docker at least ~4 GB RAM so the `apache-flink` pip step does not get killed while unpacking.
 
 ### Check services
 
@@ -146,6 +151,79 @@ python scripts/query_iceberg.py
 
 Raw rows appear after the producer publishes and Flink completes at least one checkpoint (~30s). Minute aggregates appear after watermarks close windows (can take several minutes of event-time progress).
 
+### Iceberg commit metrics
+
+Iceberg already measures each snapshot commit. This POC records those measurements locally and joins them back to the rows that were written.
+
+#### What Iceberg emits
+
+On a successful commit, Iceberg builds a [`CommitReport`](https://iceberg.apache.org/docs/latest/metrics-reporting/#commitreport) and passes it to the catalog's `MetricsReporter`. The report describes the **commit**, not a query (`ScanReport`s are ignored). It carries:
+
+| Field | Meaning |
+|-------|---------|
+| Table, snapshot id, sequence number, operation | Which snapshot was published (`append` in this POC) |
+| Duration | Wall time of the commit |
+| Attempts | How many tries the commit needed |
+| Added / removed / total files, records, bytes | What that snapshot changed |
+
+Flink emits one report per Iceberg sink per successful checkpoint (default 30s). A checkpoint that writes both tables produces two reports.
+
+#### How they are captured
+
+```text
+Flink checkpoint
+    │  Iceberg sink commits a snapshot (checkpoint 2PC)
+    ▼
+CommitReport
+    │  catalog property metrics-reporter-impl
+    ▼
+JsonFileMetricsReporter          jar in /opt/flink/lib
+    │  one JSON object per line
+    ▼
+metrics/commits.jsonl            bind mount of /var/iceberg-metrics
+    │
+    ▼
+commit_metrics.py
+    ├── join each report to its REST catalog snapshot
+    └── for earthquakes_raw, read ingested_at from the Parquet files that commit added
+```
+
+The job registers the reporter when it creates the REST catalog in `src/flink/earthquake_job.py`:
+
+- `metrics-reporter-impl` = `com.datapoc.iceberg.JsonFileMetricsReporter`
+- `commit-metrics.path` = JSONL path (`ICEBERG_COMMIT_METRICS_PATH`, default `/var/iceberg-metrics/commits.jsonl`)
+- `rest-metrics-reporting-enabled` = `false`, so reports stay in that file and are not POSTed to the REST fixture
+
+`src/metrics/JsonFileMetricsReporter.java` is compiled in the Flink image against Iceberg 1.11.0 and copied to `/opt/flink/lib`. Iceberg instantiates it from the catalog classloader, so the class has to sit next to the Iceberg runtime jar. `classloader.parent-first-patterns.additional` includes `com.datapoc` (alongside `org.apache.iceberg`) so the catalog loader and the reporter resolve to one class.
+
+`report()` appends a line only for `CommitReport`. A write error is logged and swallowed: a broken metrics file must not fail the Iceberg commit. A retried commit can emit the same snapshot twice; the viewer keeps the latest line for each `(table, snapshot_id)`.
+
+`metrics-init` creates the bind-mounted directory before Flink starts, so the `flink` user inside the container can create `commits.jsonl`. On the host the file is `apache_flink/metrics/commits.jsonl`.
+
+#### What the viewer adds
+
+`scripts/commit_metrics.py` does two things the report cannot:
+
+1. **Join.** Each JSON line is matched to the snapshot in the REST catalog by `snapshot_id`. File and record counts prefer the report. If a snapshot has no report yet, those counts fall back to the snapshot summary (`added-records`, `added-data-files`, `added-files-size`). Duration and attempts exist only on the report.
+2. **Ingestion time.** A `CommitReport` records when the commit happened and how many records it added. When those events were produced is recovered from the data files. For `earthquakes_raw`, the viewer plans the snapshot and its parent, takes the data files that appeared in between, and reads the `ingested_at` column from those Parquet files (producer publish time, UTC). Rows are counted into minute or hour buckets. `earthquakes_by_minute` has no `ingested_at`, so its rollup uses commit time.
+
+Commit time and ingestion time are different clocks. A 12:05 checkpoint can publish events the producer sent at 12:01 and 12:04. The per-commit table shows that span; the bucket table sums records on the ingestion clock.
+
+```bash
+./scripts/commit_metrics.sh
+./scripts/commit_metrics.sh --bucket hour --last 0
+```
+
+`--last` defaults to 40 commits. `0` shows the full history. `./scripts/commit_metrics.sh` runs the viewer on the Compose network (`docker compose --profile metrics run`). The same script runs on the host if the venv from above is active (`python scripts/commit_metrics.py`); it then uses `localhost` catalog ports and `metrics/commits.jsonl`.
+
+Reports show up only after the job that registers the reporter has checkpointed. Rebuild and resubmit so a running job picks up the reporter jar and the catalog property:
+
+```bash
+docker compose up --build -d --force-recreate flink-jobmanager flink-taskmanager flink-job-submitter
+```
+
+`ingested_at` on new rows is the producer timestamp. Rows already in the table were written from the USGS update time. Wipe the lakehouse with `docker compose down -v` if you want the ingestion clock to start clean.
+
 ---
 
 ## Configuration
@@ -157,6 +235,7 @@ Raw rows appear after the producer publishes and Flink completes at least one ch
 | `USGS_LOOKBACK_HOURS` | `24` | producer | Initial backfill window |
 | `KAFKA_TOPIC` | `earthquakes` | producer / Flink | Topic name |
 | `CHECKPOINT_INTERVAL_MS` | `30000` | Flink job | Iceberg commit cadence |
+| `ICEBERG_COMMIT_METRICS_PATH` | `/var/iceberg-metrics/commits.jsonl` | Flink | Where CommitReports are appended |
 
 ---
 
@@ -164,7 +243,7 @@ Raw rows appear after the producer publishes and Flink completes at least one ch
 
 ### Kafka / `earthquakes_raw`
 
-Flattened GeoJSON feature fields, including `event_id`, `magnitude`, `place`, `event_time`, coordinates, and `ingested_at`.
+Flattened GeoJSON feature fields, including `event_id`, `magnitude`, `place`, `event_time`, coordinates, and `ingested_at` (producer publish time, UTC).
 
 ### `earthquakes_by_minute`
 
@@ -186,6 +265,9 @@ docker compose down
 
 # Tear down and wipe lakehouse data
 docker compose down -v
+
+# CommitReport metrics, grouped by ingestion time
+./scripts/commit_metrics.sh
 ```
 
 ---

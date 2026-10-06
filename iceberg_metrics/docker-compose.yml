@@ -1,0 +1,133 @@
+x-iceberg-env: &iceberg-env
+  HIVE_METASTORE_URI: thrift://hive-metastore:9083
+  ICEBERG_WAREHOUSE: s3://warehouse/
+  S3_ENDPOINT: http://minio:9000
+  AWS_ACCESS_KEY_ID: admin
+  AWS_SECRET_ACCESS_KEY: password
+  AWS_REGION: us-east-1
+  SEED_NAMESPACE: events
+  SEED_TABLE: seeds
+  METRICS_NAMESPACE: observability
+  METRICS_TABLE: reports
+
+services:
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: iceberg-metrics-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "19100:9000"
+      - "19101:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+      MINIO_DOMAIN: minio
+    volumes:
+      - minio_data:/data
+    networks:
+      iceberg-metrics:
+        aliases:
+          - warehouse.minio
+
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+    container_name: iceberg-metrics-minio-init
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 admin password; do sleep 2; done;
+      mc mb -p local/warehouse || true;
+      mc anonymous set download local/warehouse || true;
+      echo 'MinIO warehouse bucket ready';
+      "
+    networks:
+      - iceberg-metrics
+
+  mariadb:
+    image: mariadb:10.6
+    container_name: iceberg-metrics-mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_USER: hive
+      MYSQL_PASSWORD: hive
+      MYSQL_DATABASE: metastore_db
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - iceberg-metrics
+
+  hive-metastore:
+    image: bitsondatadev/hive-metastore:latest
+    container_name: iceberg-metrics-hive
+    environment:
+      METASTORE_DB_HOSTNAME: mariadb
+    ports:
+      - "19083:9083"
+    volumes:
+      - ./conf/metastore-site.xml:/opt/apache-hive-metastore-3.0.0-bin/conf/metastore-site.xml
+      - ./conf/core-site.xml:/opt/hadoop-3.2.0/etc/hadoop/core-site.xml
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - iceberg-metrics
+
+  wait-for-metastore:
+    image: busybox:1.36
+    container_name: iceberg-metrics-wait-hive
+    command: ["sh", "-c", "echo 'Waiting for Hive metastore on 9083...'; for i in $$(seq 1 150); do nc -z hive-metastore 9083 && echo 'Metastore is up.' && exit 0; sleep 2; done; echo 'Timeout.'; exit 1"]
+    depends_on:
+      hive-metastore:
+        condition: service_started
+    networks:
+      - iceberg-metrics
+    restart: "no"
+
+  seed-writer:
+    build: .
+    image: iceberg-metrics:local
+    container_name: iceberg-metrics-seed-writer
+    environment:
+      <<: *iceberg-env
+      SEED_COUNT: "12"
+      SEED_BATCH_MAX: "4"
+      OTEL_SERVICE_NAME: iceberg-seed-writer
+    depends_on:
+      wait-for-metastore:
+        condition: service_completed_successfully
+    networks:
+      - iceberg-metrics
+    restart: "no"
+
+  metrics-puller:
+    build: .
+    image: iceberg-metrics:local
+    container_name: iceberg-metrics-puller
+    command: ["python", "scripts/pull_metrics.py"]
+    environment:
+      <<: *iceberg-env
+      SCAN_FILTER: "city == 'Madrid'"
+    depends_on:
+      seed-writer:
+        condition: service_completed_successfully
+    networks:
+      - iceberg-metrics
+    restart: "no"
+
+networks:
+  iceberg-metrics:
+    driver: bridge
+
+volumes:
+  minio_data:
+  mariadb_data:
