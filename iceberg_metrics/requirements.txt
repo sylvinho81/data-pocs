@@ -1,0 +1,1 @@
+pyiceberg[pyarrow,hive]==0.12.0

@@ -21,6 +21,7 @@ __pycache__/
 warehouse/
 checkpoints/
 flink-checkpoints/
+/metrics/
 
 # OS
 .DS_Store

@@ -56,7 +56,10 @@ def create_table_env() -> StreamTableEnvironment:
     env.enable_checkpointing(checkpoint_ms)
 
     settings = EnvironmentSettings.in_streaming_mode()
-    return StreamTableEnvironment.create(env, environment_settings=settings)
+    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
+    # Producer timestamps are UTC. Keep TIMESTAMP casts on that clock.
+    t_env.get_config().set("table.local-time-zone", "UTC")
+    return t_env
 
 
 def register_kafka_source(t_env: StreamTableEnvironment) -> None:
@@ -69,6 +72,7 @@ def register_kafka_source(t_env: StreamTableEnvironment) -> None:
       late USGS revisions can still join the correct event-time window.
     - ``earthquakes_enriched``: typed timestamps, magnitude bucket, and filters
       for null ids / magnitudes / event times — used by the raw Iceberg INSERT.
+      ``ingested_at`` is the producer publish time, not the USGS event time.
     """
     bootstrap = env_or_default("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
     topic = env_or_default("KAFKA_TOPIC", "earthquakes")
@@ -133,7 +137,7 @@ def register_kafka_source(t_env: StreamTableEnvironment) -> None:
             depth_km,
             alert,
             felt,
-            TO_TIMESTAMP_LTZ(COALESCE(updated_ms, event_time_ms), 3) AS ingested_at,
+            TO_TIMESTAMP(SUBSTRING(ingested_at, 1, 23), 'yyyy-MM-dd''T''HH:mm:ss.SSS') AS ingested_at,
             CASE
                 WHEN magnitude < 3.0 THEN '2.5-2.9'
                 WHEN magnitude < 4.0 THEN '3.0-3.9'
@@ -156,12 +160,19 @@ def register_iceberg_catalog(t_env: StreamTableEnvironment) -> None:
     Also ensures the ``earthquakes`` database exists under ``iceberg_catalog``.
     Connection settings come from env vars so the same job works in Docker
     (service DNS) without hard-coding host ports.
+
+    ``metrics-reporter-impl`` appends each CommitReport as JSONL. That file is
+    what ``scripts/commit_metrics.py`` reads. The class lives in
+    ``/opt/flink/lib`` so Iceberg's catalog classloader can see it.
     """
     rest_uri = env_or_default("ICEBERG_REST_URI", "http://iceberg-rest:8181")
     warehouse = env_or_default("ICEBERG_WAREHOUSE", "s3://warehouse/")
     s3_endpoint = env_or_default("S3_ENDPOINT", "http://minio:9000")
     access_key = env_or_default("AWS_ACCESS_KEY_ID", "admin")
     secret_key = env_or_default("AWS_SECRET_ACCESS_KEY", "password")
+    metrics_path = env_or_default(
+        "ICEBERG_COMMIT_METRICS_PATH", "/var/iceberg-metrics/commits.jsonl"
+    )
 
     t_env.execute_sql(
         f"""
@@ -175,7 +186,10 @@ def register_iceberg_catalog(t_env: StreamTableEnvironment) -> None:
             's3.access-key-id' = '{access_key}',
             's3.secret-access-key' = '{secret_key}',
             's3.path-style-access' = 'true',
-            'client.region' = 'us-east-1'
+            'client.region' = 'us-east-1',
+            'rest-metrics-reporting-enabled' = 'false',
+            'metrics-reporter-impl' = 'com.datapoc.iceberg.JsonFileMetricsReporter',
+            'commit-metrics.path' = '{metrics_path}'
         )
         """
     )
