@@ -1,0 +1,6 @@
+.venv/
+moto_s3tables/.venv/
+__pycache__/
+*.pyc
+duckdb_local.db
+config/aws.yaml

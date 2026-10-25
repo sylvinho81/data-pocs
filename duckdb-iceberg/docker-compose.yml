@@ -1,0 +1,91 @@
+x-duckdb-iceberg-env: &duckdb-iceberg-env
+  ICEBERG_REST_URI: http://iceberg-rest:8181
+  ICEBERG_WAREHOUSE: s3://warehouse/
+  S3_ENDPOINT: http://minio:9000
+  AWS_ACCESS_KEY_ID: admin
+  AWS_SECRET_ACCESS_KEY: password
+  AWS_REGION: us-east-1
+  ICEBERG_NAMESPACE: poc
+  ICEBERG_TABLE: daily_metrics
+  CONFIG_PATH: /app/config/docker.yaml
+
+services:
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: duckdb-iceberg-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "19200:9000"
+      - "19201:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+      MINIO_DOMAIN: minio
+    volumes:
+      - minio_data:/data
+    networks:
+      duckdb-iceberg:
+        aliases:
+          - warehouse.minio
+
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+    container_name: duckdb-iceberg-minio-init
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 admin password; do sleep 1; done;
+      mc mb -p local/warehouse || true;
+      mc anonymous set download local/warehouse || true;
+      echo 'MinIO warehouse bucket ready';
+      "
+    networks:
+      - duckdb-iceberg
+
+  iceberg-rest:
+    image: apache/iceberg-rest-fixture:1.10.1
+    container_name: duckdb-iceberg-rest
+    ports:
+      - "18282:8181"
+    environment:
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: us-east-1
+      CATALOG_WAREHOUSE: s3://warehouse/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      CATALOG_CLIENT__REGION: us-east-1
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8181'"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    networks:
+      - duckdb-iceberg
+
+  demo:
+    build: .
+    image: duckdb-iceberg:local
+    container_name: duckdb-iceberg-demo
+    environment:
+      <<: *duckdb-iceberg-env
+    depends_on:
+      iceberg-rest:
+        condition: service_healthy
+    networks:
+      - duckdb-iceberg
+    restart: "no"
+
+networks:
+  duckdb-iceberg:
+    driver: bridge
+
+volumes:
+  minio_data:
