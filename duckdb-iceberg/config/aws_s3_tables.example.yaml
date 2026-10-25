@@ -1,0 +1,24 @@
+# Example: Amazon S3 Tables (Iceberg). Copy to aws.yaml and fill in your ARN/credentials.
+# Run: CONFIG_PATH=config/aws.yaml python scripts/run_demo.py
+#
+# Requires IAM permissions for S3 Tables and a REST-capable DuckDB iceberg extension build.
+
+name: aws_s3_tables
+
+iceberg:
+  # S3 Tables bucket ARN from the AWS console (not the s3:// path).
+  attach_path: "arn:aws:s3tables:us-east-1:111122223333:bucket/your-table-bucket"
+  catalog_alias: lake
+  endpoint_type: s3_tables
+  # rest_uri / authorization_type not used when endpoint_type is s3_tables
+
+storage:
+  region: us-east-1
+  provider: credential_chain
+  # Named profile from ~/.aws/config (role_arn + source_profile supported via CHAIN config)
+  aws_profile: your-profile
+  # Or omit aws_profile and export AWS_PROFILE=your-profile instead
+
+table:
+  namespace: poc
+  name: daily_metrics

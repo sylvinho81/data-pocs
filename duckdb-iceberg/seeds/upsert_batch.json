@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1001,
+    "event_date": "2025-10-01",
+    "city": "Madrid",
+    "metric_name": "active_users",
+    "metric_value": 1300.0,
+    "updated_at": "2025-10-01T18:00:00Z",
+    "_note": "same id+date as seed row — value and updated_at should change"
+  },
+  {
+    "id": 1004,
+    "event_date": "2025-10-02",
+    "city": "Seville",
+    "metric_name": "orders",
+    "metric_value": 17.0,
+    "updated_at": "2025-10-02T11:00:00Z",
+    "_note": "new id+date — should insert"
+  },
+  {
+    "id": 1002,
+    "event_date": "2025-10-01",
+    "city": "Barcelona",
+    "metric_name": "active_users",
+    "metric_value": 995.0,
+    "updated_at": "2025-10-01T20:00:00Z",
+    "_note": "update Barcelona row for 2025-10-01"
+  }
+]

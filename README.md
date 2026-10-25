@@ -68,6 +68,14 @@ PyIceberg POC: **one JSON seed per event → Apache Iceberg on MinIO**, with a *
 - Scan counters (manifests and files kept or skipped) are collected by planning a query
 - Report rows follow an OpenTelemetry-style `iceberg.commit.*` / `iceberg.scan.*` metric map
 
+### [duckdb-iceberg](./duckdb-iceberg/)
+
+DuckDB POC: **JSON seed → Apache Iceberg on MinIO** via DuckDB’s `iceberg` extension, with an **Iceberg REST** catalog (same stack pattern as `apache_flink`).
+
+- Demo loads seed data, then runs `MERGE INTO` upserts keyed by `(id, event_date)`
+- Docker Compose stack (MinIO, Iceberg REST) plus host Python scripts for write and query
+- Config switch for local MinIO/REST vs AWS S3 Tables; separate moto experiment under `moto_s3tables/`
+
 ---
 
 *Each project contains its own README with specific setup and usage instructions.*

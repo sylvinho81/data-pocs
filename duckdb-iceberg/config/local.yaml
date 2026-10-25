@@ -1,0 +1,23 @@
+# MinIO + Iceberg REST (docker compose). Host-side runs use localhost ports.
+name: local
+
+iceberg:
+  attach_path: s3://warehouse/
+  catalog_alias: lake
+  rest_uri: http://localhost:18282
+  authorization_type: none
+  access_delegation_mode: none
+  stage_create_tables: false
+  disable_multi_table_commit: true
+
+storage:
+  region: us-east-1
+  access_key_id: admin
+  secret_access_key: password
+  endpoint: http://localhost:19200
+  url_style: path
+  use_ssl: false
+
+table:
+  namespace: poc
+  name: daily_metrics

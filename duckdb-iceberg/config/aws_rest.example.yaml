@@ -1,0 +1,22 @@
+# Example: Iceberg REST catalog backed by real AWS S3 (Polaris, Lakekeeper, Glue REST, etc.).
+# Copy to aws.yaml and adjust endpoint + warehouse path.
+
+name: aws_rest
+
+iceberg:
+  attach_path: s3://your-iceberg-warehouse/
+  catalog_alias: lake
+  rest_uri: https://your-catalog.example.com
+  authorization_type: oauth2
+  oauth2_server_uri: https://your-catalog.example.com/v1/oauth/tokens
+  client_id: your-client-id
+  client_secret: your-client-secret
+  access_delegation_mode: vended_credentials
+
+storage:
+  region: us-east-1
+  provider: credential_chain
+
+table:
+  namespace: poc
+  name: daily_metrics
